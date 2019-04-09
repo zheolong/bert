@@ -23,6 +23,7 @@ import re
 import unicodedata
 import six
 import tensorflow as tf
+import codecs
 
 
 def validate_case_matches_checkpoint(do_lower_case, init_checkpoint):
@@ -161,11 +162,12 @@ def whitespace_tokenize(text):
 class FullTokenizer(object):
   """Runs end-to-end tokenziation."""
 
-  def __init__(self, vocab_file, do_lower_case=True):
+  def __init__(self, vocab_file, do_lower_case=True, log_file=""):
+    log_file = codecs.open(log_file, 'w', 'utf-8')
     self.vocab = load_vocab(vocab_file)
     self.inv_vocab = {v: k for k, v in self.vocab.items()}
     self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case)
-    self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab)
+    self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, log_file=log_file)
 
   def tokenize(self, text):
     split_tokens = []
@@ -300,10 +302,11 @@ class BasicTokenizer(object):
 class WordpieceTokenizer(object):
   """Runs WordPiece tokenziation."""
 
-  def __init__(self, vocab, unk_token="[UNK]", max_input_chars_per_word=200):
+  def __init__(self, vocab, log_file, unk_token="[UNK]", max_input_chars_per_word=200):
     self.vocab = vocab
     self.unk_token = unk_token
     self.max_input_chars_per_word = max_input_chars_per_word
+    self.log_file = log_file
 
   def tokenize(self, text):
     """Tokenizes a piece of text into its word pieces.
@@ -330,6 +333,7 @@ class WordpieceTokenizer(object):
       chars = list(token)
       if len(chars) > self.max_input_chars_per_word:
         output_tokens.append(self.unk_token)
+        self.log_file.write('%s\n' % token)
         continue
 
       is_bad = False
@@ -354,6 +358,7 @@ class WordpieceTokenizer(object):
 
       if is_bad:
         output_tokens.append(self.unk_token)
+        self.log_file.write('%s\n' % token)
       else:
         output_tokens.extend(sub_tokens)
     return output_tokens

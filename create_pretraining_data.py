@@ -20,8 +20,8 @@ from __future__ import print_function
 
 import collections
 import random
-import tokenization
 import tensorflow as tf
+import tokenization
 
 flags = tf.flags
 
@@ -36,6 +36,9 @@ flags.DEFINE_string(
 
 flags.DEFINE_string("vocab_file", None,
                     "The vocabulary file that the BERT model was trained on.")
+
+flags.DEFINE_string("log_file", None,
+                    "The log file for special logging")
 
 flags.DEFINE_bool(
     "do_lower_case", True,
@@ -409,8 +412,9 @@ def truncate_seq_pair(tokens_a, tokens_b, max_num_tokens, rng):
 def main(_):
   tf.logging.set_verbosity(tf.logging.INFO)
 
+  ## my own log file
   tokenizer = tokenization.FullTokenizer(
-      vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
+      vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case, log_file=FLAGS.log_file)
 
   input_files = []
   for input_pattern in FLAGS.input_file.split(","):
@@ -439,4 +443,5 @@ if __name__ == "__main__":
   flags.mark_flag_as_required("input_file")
   flags.mark_flag_as_required("output_file")
   flags.mark_flag_as_required("vocab_file")
+  flags.mark_flag_as_required("log_file")
   tf.app.run()

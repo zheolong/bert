@@ -22,6 +22,7 @@ import os
 import modeling
 import optimization
 import tensorflow as tf
+import time
 
 flags = tf.flags
 
@@ -177,10 +178,59 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
       train_op = optimization.create_optimizer(
           total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
 
+      def metric_fn(masked_lm_example_loss, masked_lm_log_probs, masked_lm_ids,
+                    masked_lm_weights, next_sentence_example_loss,
+                    next_sentence_log_probs, next_sentence_labels):
+        """Computes the loss and accuracy of the model."""
+        masked_lm_log_probs = tf.reshape(masked_lm_log_probs,
+                                         [-1, masked_lm_log_probs.shape[-1]])
+        masked_lm_predictions = tf.argmax(
+            masked_lm_log_probs, axis=-1, output_type=tf.int32)
+        masked_lm_example_loss = tf.reshape(masked_lm_example_loss, [-1])
+        masked_lm_ids = tf.reshape(masked_lm_ids, [-1])
+        masked_lm_weights = tf.reshape(masked_lm_weights, [-1])
+        masked_lm_accuracy = tf.metrics.accuracy(
+            labels=masked_lm_ids,
+            predictions=masked_lm_predictions,
+            weights=masked_lm_weights)
+        masked_lm_mean_loss = tf.metrics.mean(
+            values=masked_lm_example_loss, weights=masked_lm_weights)
+
+        next_sentence_log_probs = tf.reshape(
+            next_sentence_log_probs, [-1, next_sentence_log_probs.shape[-1]])
+        next_sentence_predictions = tf.argmax(
+            next_sentence_log_probs, axis=-1, output_type=tf.int32)
+        next_sentence_labels = tf.reshape(next_sentence_labels, [-1])
+        next_sentence_accuracy = tf.metrics.accuracy(
+            labels=next_sentence_labels, predictions=next_sentence_predictions)
+        next_sentence_mean_loss = tf.metrics.mean(
+            values=next_sentence_example_loss)
+
+        return {
+            "masked_lm_accuracy": masked_lm_accuracy,
+            "masked_lm_loss": masked_lm_mean_loss,
+            "next_sentence_accuracy": next_sentence_accuracy,
+            "next_sentence_loss": next_sentence_mean_loss,
+        }
+
+      metric_a = {"loss": total_loss}
+      metric_b = metric_fn(
+          masked_lm_example_loss, masked_lm_log_probs, masked_lm_ids,
+          masked_lm_weights, next_sentence_example_loss,
+          next_sentence_log_probs, next_sentence_labels
+      )
+      metrics = {**metric_a, **metric_b}
+
+      metrics = {"loss": total_loss, 
+          "masked_lm_loss": masked_lm_loss, 
+          "next_sentence_loss": next_sentence_loss}
+      logging_hook = tf.train.LoggingTensorHook(metrics, every_n_iter=100)
+
       output_spec = tf.contrib.tpu.TPUEstimatorSpec(
           mode=mode,
           loss=total_loss,
           train_op=train_op,
+          training_hooks=[logging_hook],
           scaffold_fn=scaffold_fn)
     elif mode == tf.estimator.ModeKeys.EVAL:
 
@@ -490,4 +540,9 @@ if __name__ == "__main__":
   flags.mark_flag_as_required("input_file")
   flags.mark_flag_as_required("bert_config_file")
   flags.mark_flag_as_required("output_dir")
+
+  start_time = time.time()
   tf.app.run()
+  end_time = time.time()
+  tf.logging.info("--- %s seconds ---", (end_time - start_time))
+
